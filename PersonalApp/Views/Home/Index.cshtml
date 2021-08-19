@@ -1,0 +1,254 @@
+﻿@{
+    ViewData["Title"] = "Calendar";
+}
+@model CalendarEventsWithCategories
+
+@section Scripts
+{
+    <script src="@Url.Content("~/lib/fullcalendar/main.js")"></script>
+    <script src="@Url.Content("~/lib/tempusdominus-bootstrap-4/js/tempusdominus-bootstrap-4.js")"></script>
+
+    <script>
+
+        $(document).ready(function () {
+            var calendarEl = document.getElementById('calendar');
+            var calendarE2 = document.getElementById('calendarDaily');
+
+            var eventsData = @Html.Raw(Json.Serialize(Model.CalendarEvents));
+
+            var calendar = new FullCalendar.Calendar(calendarEl, {
+                initialView: 'dayGridMonth',
+                selectable: true,
+                dateClick: openDetail,
+                events: eventsData,
+                eventClick: openDropdown
+            });
+
+            var calendarDaily = new FullCalendar.Calendar(calendarE2, {
+                initialView: 'timeGridDay',
+                headerToolbar: false,
+                events: eventsData
+            });
+
+            calendar.render();
+            calendarDaily.render();
+
+            var dateTimePickerOptions = {
+                format: 'DD/MM/yyyy HH:mm'
+            };
+
+            $('#datetimepicker1').datetimepicker(dateTimePickerOptions);
+            $('#datetimepicker2').datetimepicker(dateTimePickerOptions);
+
+            @if (ViewBag.SelectedDay != null)
+            {
+                <text>
+                    calendar.gotoDate("@ViewBag.SelectedDay");
+                    calendarDaily.gotoDate("@ViewBag.SelectedDay");
+                    setTimeCalendarHeaderText("@ViewBag.SelectedDay")
+                </text>
+            }
+            else
+            {
+                <text>
+                    setTimeCalendarHeaderText(calendarDaily.getDate())
+                </text>
+            }
+
+            function openDetail(info) {
+
+                calendarDaily.gotoDate(info.date);
+
+                setTimeCalendarHeaderText(info.date);
+
+            }
+
+            function setTimeCalendarHeaderText(text) {
+                $("#calendarDailyTitle").text(FullCalendar.formatDate(text, {
+                    month: 'long',
+                    year: 'numeric',
+                    day: 'numeric'
+                }));
+            }
+
+            function openDropdown(info) {
+
+                //create dropdown
+                $(info.el).attr("data-toggle", "dropdown");
+                var btn = $("<a class='dropdown-item' href='#'>Remove</a>");
+                btn.click(function () { eventRemove(info.event) });
+
+                var dropDownContainer = $("<div class='dropdown-menu dropdown-menu-sm dropDownMiddle' id='context-menu'></div>");
+
+                dropDownContainer.append(btn);
+                $(info.el).append(dropDownContainer);
+
+                //open dropdown
+                $('.dropdown-toggle').dropdown()
+            }
+
+            function eventRemove(event) {
+                $('#loaddingWrapper').show();
+
+                var url = "@Url.Action("RemoveTodo",new { eventId="__changeId__" })";
+
+                $.ajax({
+                    type: "GET",
+                    url: url.replace("__changeId__", event.id),
+                    success: function (data) {
+                        $('#loaddingWrapper').hide();
+                        if (data)
+                            showToast(data)
+                        else {
+                            var url = "@Url.Action("Index","Home",new { selectedDay = "__change__"} )";
+                            window.location.href = url.replace("__change__", moment(event.start).format('YYYY-MM-DD'));
+                        }
+                    }
+                });
+
+                return true
+            }
+
+            $("#createTodoForm").submit(function (event) {
+
+                if (!$(this).valid())
+                    return false;
+
+                var startDate = $("#datetimepicker1").datetimepicker("date");
+                var endDate = $("#datetimepicker2").datetimepicker("date");
+
+                var formData = {
+                    Title: $("#todoTitle").val(),
+                    Start: startDate ? moment(startDate).format() : null,
+                    StartAllDay: $("#startAllDayCheck").is(":checked"),
+                    End: endDate ? moment(endDate).format() : null,
+                    EndAllDay: $("#endAllDayCheck").is(":checked"),
+                    CategoryId: $("#categoryDropDown").val()
+                };
+
+                $('#loaddingWrapper').show();
+
+                $.ajax({
+                    type: "POST",
+                    url: "@Url.Action("CreateTodo")",
+                    data: formData,
+                    success: function (data) {
+                        $('#loaddingWrapper').hide();
+                        if (data)
+                            showToast(data)
+                        else {
+                            var url = "@Url.Action("Index","Home",new { selectedDay = "__change__"} )";
+                            window.location.href = url.replace("__change__", moment(formData.Start).format('YYYY-MM-DD'));
+                        }
+                    }
+                });
+                return false;
+            });
+        });
+
+    </script>
+}
+
+<div class="row">
+    <div class="col-6">
+        <div id='calendar'></div>
+    </div>
+    <div class="col-6">
+        <div id='calendarDailyHeader' class='fc-header-toolbar fc-toolbar'>
+            <div class="row">
+                <div class="col-10">
+                    <h2 class='fc-toolbar-title' id="calendarDailyTitle"></h2>
+                </div>
+                <div class="col-2">
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addTodoModal">Add Todo</button>
+                </div>
+            </div>
+        </div>
+        <div id='calendarDaily'></div>
+    </div>
+</div>
+
+<div class="modal fade" id="addTodoModal" tabindex="-1" role="dialog" aria-labelledby="addTodoModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addTodoModalLabel">Add new Todo</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="createTodoForm">
+
+                    <div class="form-group">
+                        <label for="todoTitle">Title</label>
+                        <input type="text" class="form-control" id="todoTitle" name="title" data-val="true" data-val-required="Title required">
+                        <span class="field-validation-valid" data-valmsg-for="title" data-valmsg-replace="true"></span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="datetimepicker1">Start Date</label>
+                        <div class="row">
+
+                            <div class="col-8">
+                                <div class="input-group date" id="datetimepicker1" data-target-input="nearest">
+                                    <input type="text" name="startingDate" class="form-control datetimepicker-input" data-target="#datetimepicker1" data-val="true" data-val-required="Starting date required" />
+                                    <div class="input-group-append" data-target="#datetimepicker1" data-toggle="datetimepicker">
+                                        <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+                                    </div>
+
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="startAllDayCheck">
+                                    <label class="form-check-label" for="startAllDayCheck">All Day</label>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="field-validation-valid" data-valmsg-for="startingDate" data-valmsg-replace="true"></span>
+                    </div>
+                    <div class="form-group">
+                        <label for="datetimepicker2">End Date</label>
+
+                        <div class="row">
+
+                            <div class="col-8">
+                                <div class="input-group date" id="datetimepicker2" data-target-input="nearest">
+                                    <input type="text" class="form-control datetimepicker-input" data-target="#datetimepicker2" />
+                                    <div class="input-group-append" data-target="#datetimepicker2" data-toggle="datetimepicker">
+                                        <div class="input-group-text"><i class="fa fa-calendar"></i></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="form-check">
+                                    <input type="checkbox" class="form-check-input" id="endAllDayCheck">
+                                    <label class="form-check-label" for="endAllDayCheck">All Day</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="category">Category</label>
+                        <select class="custom-select" name="category" id="categoryDropDown">
+                            @foreach (var category in Model.Categories)
+                            {
+                                <option value="@category.Id">@category.Name</option>
+                            }
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-success">Submit</button>
+
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
